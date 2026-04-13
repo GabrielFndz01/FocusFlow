@@ -3,9 +3,9 @@ import { getFirestore } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDHyJNDuw1NZpX-kZER6ZKxw4kzLH13pu0",
-  authDomain: "flowfocus-79f2e.firebaseapp.com",
-  projectId: "flowfocus-79f2e",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: "flowfocus-79f2e.firebasestorage.app",
   messagingSenderId: "886511220201",
   appId: "1:886511220201:web:ed80e54100942185128778"
