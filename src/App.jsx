@@ -113,9 +113,19 @@ export default function App() {
     }
 
     if (editingTask) {
-      await updateDoc(doc(db, "tasks", editingTask.id), {
-        title, details, topic, priority, deadline: finalDeadline, isTemporary
-      });
+      if (editingTask.groupId) {
+        const batch = writeBatch(db);
+        tasks.filter(t => t.groupId === editingTask.groupId).forEach(t => {
+          batch.update(doc(db, "tasks", t.id), {
+            title, details, topic, priority, isTemporary
+          });
+        });
+        await batch.commit();
+      } else {
+        await updateDoc(doc(db, "tasks", editingTask.id), {
+          title, details, topic, priority, deadline: finalDeadline, isTemporary
+        });
+      }
       resetForm(); return;
     }
 
@@ -173,6 +183,14 @@ export default function App() {
     const batch = writeBatch(db);
     tasksToDelete.forEach(t => batch.delete(doc(db, "tasks", t.id)));
     await batch.commit();
+  };
+
+  const handleDeleteClick = (task) => {
+    if (task.groupId) {
+      setDeletePrompt({ isOpen: true, task });
+    } else {
+      setDeletePrompt({ isOpen: true, task });
+    }
   };
 
   // --- LÓGICA DE NAVEGACIÓN Y FILTROS ---
@@ -257,7 +275,7 @@ export default function App() {
             </div>
           )}
           {!task.completed && (
-            <button onClick={() => openEditModal(task)} className="p-2 text-slate-500 hover:text-cyan-400 rounded-lg transition-colors hidden md:block"><Pencil size={16} /></button>
+            <button onClick={() => openEditModal(task)} className="p-2 text-slate-500 hover:text-cyan-400 rounded-lg transition-colors"><Pencil size={16} /></button>
           )}
           <button onClick={() => handleDeleteClick(task)} className="p-2 text-slate-500 hover:bg-rose-500/20 hover:text-rose-500 rounded-lg transition-all"><Trash2 size={16} /></button>
         </div>
