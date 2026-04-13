@@ -10,7 +10,7 @@ import { LineChart, Line, ResponsiveContainer, XAxis, Tooltip } from 'recharts';
 import { 
   LayoutDashboard, Calendar, AlertCircle, Archive, 
   Plus, Bell, User, CheckSquare, Square, Trash2, Eraser, Clock,
-  ChevronLeft, ChevronRight, Sun, AlertTriangle, Pencil, CheckCircle2, Menu, X
+  ChevronLeft, ChevronRight, Sun, AlertTriangle, Pencil, CheckCircle2, Menu, X, Zap
 } from 'lucide-react';
 
 export default function App() {
@@ -22,6 +22,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('tasks');
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isTemporary, setIsTemporary] = useState(false); // Para distinguir tareas fugaces
   
   // ESTADOS DEL FORMULARIO
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,6 +41,11 @@ export default function App() {
   const [selectedDayTasks, setSelectedDayTasks] = useState(null); // Para el modal del calendario
   const [filterTopic, setFilterTopic] = useState('Todos'); // Filtro de categorías
 
+
+  // AGREGA ESTOS DOS NUEVOS:
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+
   useEffect(() => {
     localStorage.setItem('focus_flow_tasks', JSON.stringify(tasks));
   }, [tasks]);
@@ -50,6 +56,7 @@ export default function App() {
     setTitle(task.title);
     setDetails(task.details || '');
     setTopic(task.topic || 'Otro');
+    setIsTemporary(task.isTemporary || false);
     if (task.deadline) {
       const d = new Date(task.deadline);
       setDateStr(format(d, 'yyyy-MM-dd'));
@@ -64,6 +71,7 @@ export default function App() {
   const resetForm = () => {
     setEditingTask(null); setTitle(''); setDateStr(''); setTimeStr(''); 
     setPriority('Media'); setDetails(''); setTopic('Otro'); setSelectedDays([]);
+    setIsTemporary(false);
     setIsModalOpen(false);
   };
 
@@ -84,7 +92,7 @@ export default function App() {
     if (editingTask) {
       setTasks(tasks.map(t => 
         t.id === editingTask.id 
-          ? { ...t, title, details, topic, priority, deadline: finalDeadline ? finalDeadline.toISOString() : null } 
+          ? { ...t, title, details, topic, priority, deadline: finalDeadline ? finalDeadline.toISOString() : null, isTemporary } 
           : t
       ));
       resetForm();
@@ -103,7 +111,7 @@ export default function App() {
           tasksToAdd.push({
             id: Date.now() + added, groupId, title, details, topic, 
             deadline: new Date(current).toISOString(), priority, completed: false, 
-            createdAt: new Date().toISOString(), completedAt: null
+            createdAt: new Date().toISOString(), completedAt: null, isTemporary
           });
           added++;
         }
@@ -113,7 +121,7 @@ export default function App() {
       tasksToAdd.push({
         id: Date.now(), title, details, topic, groupId: null,
         deadline: finalDeadline ? finalDeadline.toISOString() : null, priority, completed: false, 
-        createdAt: new Date().toISOString(), completedAt: null
+        createdAt: new Date().toISOString(), completedAt: null, isTemporary
       });
     }
     
@@ -173,18 +181,29 @@ export default function App() {
   }, [tasks, filterTopic]);
 
   const todayTasks = useMemo(() => {
-    return allIncompleteTasks.filter(t => t.deadline && isSameDay(parseISO(t.deadline), new Date()));
+    const scheduledTasks = allIncompleteTasks.filter(t => t.deadline && isSameDay(parseISO(t.deadline), new Date()));
+    const tempTasks = allIncompleteTasks.filter(t => t.isTemporary);
+    return [...scheduledTasks, ...tempTasks];
   }, [allIncompleteTasks]);
 
   const completedTasks = useMemo(() => {
     return tasks.filter(t => t.completed).sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
   }, [tasks]);
 
+  const temporaryTasks = useMemo(() => {
+    return tasks.filter(t => t.isTemporary && !t.completed);
+  }, [tasks]);
+
   const urgentTasks = useMemo(() => {
-    return tasks.filter(t => t.deadline && !t.completed).filter(t => {
+    const scheduled = tasks.filter(t => t.deadline && !t.completed).filter(t => {
       const hoursLeft = differenceInHours(parseISO(t.deadline), new Date());
       return hoursLeft >= 0 && hoursLeft <= 48;
-    }).sort((a, b) => new Date(a.deadline) - new Date(b.deadline)).slice(0, 4);
+    }).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+    
+    const temporary = tasks.filter(t => t.isTemporary && !t.completed);
+    const combined = [...scheduled, ...temporary];
+    
+    return combined.slice(0, 4);
   }, [tasks]);
 
   const analyticsStats = useMemo(() => {
@@ -250,12 +269,44 @@ export default function App() {
     <>
       <button onClick={() => {setActiveTab('tasks'); setIsMobileMenuOpen(false)}} className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full transition-all ${activeTab === 'tasks' ? 'bg-cyan-950/30 text-cyan-400 md:border-l-2 border-cyan-400' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><LayoutDashboard size={18} /> <span className="text-sm font-medium">Todas</span></button>
       <button onClick={() => {setActiveTab('today'); setIsMobileMenuOpen(false)}} className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full transition-all ${activeTab === 'today' ? 'bg-cyan-950/30 text-cyan-400 md:border-l-2 border-cyan-400' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Sun size={18} /> <span className="text-sm font-medium">Hoy</span></button>
+      <button onClick={() => {setActiveTab('temporary'); setIsMobileMenuOpen(false)}} className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full transition-all ${activeTab === 'temporary' ? 'bg-purple-950/30 text-purple-400 md:border-l-2 border-purple-400' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Zap size={18} /> <span className="text-sm font-medium">Fugaces</span></button>
       <button onClick={() => {setActiveTab('completed'); setIsMobileMenuOpen(false)}} className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full transition-all ${activeTab === 'completed' ? 'bg-cyan-950/30 text-cyan-400 md:border-l-2 border-cyan-400' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><CheckCircle2 size={18} /> <span className="text-sm font-medium">Completadas</span></button>
       <button onClick={() => {setActiveTab('calendar'); setIsMobileMenuOpen(false)}} className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full transition-all ${activeTab === 'calendar' ? 'bg-cyan-950/30 text-cyan-400 md:border-l-2 border-cyan-400' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Calendar size={18} /> <span className="text-sm font-medium">Cronograma</span></button>
       <button onClick={() => {setActiveTab('priorities'); setIsMobileMenuOpen(false)}} className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full transition-all ${activeTab === 'priorities' ? 'bg-cyan-950/30 text-cyan-400 md:border-l-2 border-cyan-400' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><AlertCircle size={18} /> <span className="text-sm font-medium">Prioridades</span></button>
       <button onClick={() => {setActiveTab('analytics'); setIsMobileMenuOpen(false)}} className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full transition-all ${activeTab === 'analytics' ? 'bg-cyan-950/30 text-cyan-400 md:border-l-2 border-cyan-400' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Archive size={18} /> <span className="text-sm font-medium">Analíticas</span></button>
     </>
   );
+  // LÓGICA PARA DESLIZAR (SWIPE) EN MÓVILES
+  const minSwipeDistance = 50; // Distancia mínima que debe recorrer el dedo
+  const tabOrder = ['tasks', 'today', 'temporary', 'completed', 'calendar', 'priorities', 'analytics'];
+
+  const onTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe || isRightSwipe) {
+      const currentIndex = tabOrder.indexOf(activeTab);
+      if (isLeftSwipe && currentIndex < tabOrder.length - 1) {
+        // Deslizó hacia la izquierda -> Siguiente pestaña
+        setActiveTab(tabOrder[currentIndex + 1]);
+      }
+      if (isRightSwipe && currentIndex > 0) {
+        // Deslizó hacia la derecha -> Pestaña anterior
+        setActiveTab(tabOrder[currentIndex - 1]);
+      }
+    }
+  };
 
   return (
     <div className="flex h-screen bg-[#0b0c10] text-slate-300 font-sans overflow-hidden">
@@ -279,11 +330,16 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+      <main 
+        className="flex-1 flex flex-col h-full overflow-hidden relative"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         {/* HEADER */}
         <header className="h-16 md:h-20 border-b border-slate-800/50 flex items-center justify-between px-4 md:px-8 bg-[#0b0c10]/80 backdrop-blur-md z-10">
           <div className="flex items-center gap-3">
-            <h2 className="text-cyan-400 font-bold tracking-widest uppercase text-xs md:text-sm">{activeTab === 'tasks' ? 'Directorio General' : activeTab === 'today' ? 'Foco de Hoy' : activeTab}</h2>
+            <h2 className="text-cyan-400 font-bold tracking-widest uppercase text-xs md:text-sm">{activeTab === 'tasks' ? 'Directorio General' : activeTab === 'today' ? 'Foco de Hoy' : activeTab === 'temporary' ? 'Tareas Fugaces' : activeTab}</h2>
           </div>
           <div className="flex items-center gap-3 md:gap-6">
             <button onClick={() => resetForm() || setIsModalOpen(true)} className="bg-cyan-500 hover:bg-cyan-400 text-black font-bold px-3 py-1.5 md:px-4 md:py-2 rounded-lg flex items-center gap-2 text-sm transition-all shadow-[0_0_15px_rgba(34,211,238,0.3)]">
@@ -348,6 +404,26 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-3 md:gap-4"><AnimatePresence>{todayTasks.map(renderTask)}</AnimatePresence></div>
+                )}
+              </motion.div>
+            )}
+
+            {/* TAREAS FUGACES */}
+            {activeTab === 'temporary' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-8 gap-4">
+                  <div>
+                    <h2 className="text-3xl md:text-4xl font-light text-white tracking-wide">Tareas <span className="text-purple-400 font-semibold">Fugaces</span></h2>
+                    <p className="text-slate-400 text-sm mt-1">Sin fecha ni hora, crea y gestiona libremente</p>
+                  </div>
+                </div>
+                {temporaryTasks.length === 0 ? (
+                  <div className="text-center text-slate-500 mt-10 border border-slate-800/50 rounded-2xl p-10 bg-[#16181d]/50">
+                    <Zap size={48} className="mx-auto mb-4 opacity-20" />
+                    <p>No tienes tareas fugaces. ¡Crea una rápidamente!</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3 md:gap-4"><AnimatePresence>{temporaryTasks.map(renderTask)}</AnimatePresence></div>
                 )}
               </motion.div>
             )}
@@ -443,8 +519,8 @@ export default function App() {
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0b0c10]/95 backdrop-blur-md border-t border-slate-800/50 flex justify-around items-center p-2 z-40 pb-safe">
           <button onClick={() => setActiveTab('tasks')} className={`p-3 rounded-xl transition-colors ${activeTab === 'tasks' ? 'text-cyan-400 bg-cyan-950/30' : 'text-slate-500 hover:text-slate-300'}`}><LayoutDashboard size={22} /></button>
           <button onClick={() => setActiveTab('today')} className={`p-3 rounded-xl transition-colors ${activeTab === 'today' ? 'text-cyan-400 bg-cyan-950/30' : 'text-slate-500 hover:text-slate-300'}`}><Sun size={22} /></button>
+          <button onClick={() => setActiveTab('temporary')} className={`p-3 rounded-xl transition-colors ${activeTab === 'temporary' ? 'text-purple-400 bg-purple-950/30' : 'text-slate-500 hover:text-slate-300'}`}><Zap size={22} /></button>
           <button onClick={() => setActiveTab('completed')} className={`p-3 rounded-xl transition-colors ${activeTab === 'completed' ? 'text-cyan-400 bg-cyan-950/30' : 'text-slate-500 hover:text-slate-300'}`}><CheckCircle2 size={22} /></button>
-          <button onClick={() => setActiveTab('calendar')} className={`p-3 rounded-xl transition-colors ${activeTab === 'calendar' ? 'text-cyan-400 bg-cyan-950/30' : 'text-slate-500 hover:text-slate-300'}`}><Calendar size={22} /></button>
           <button onClick={() => setIsMobileMenuOpen(true)} className="p-3 rounded-xl text-slate-500 hover:text-slate-300 transition-colors"><Menu size={22} /></button>
         </div>
 
@@ -504,6 +580,11 @@ export default function App() {
               <form onSubmit={saveTask} className="flex flex-col gap-4">
                 <input type="text" placeholder="Título" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus className="bg-[#0b0c10] border border-slate-700 rounded-xl p-3 md:p-4 text-white focus:border-cyan-500 transition-all outline-none" required />
                 
+                <div className="flex items-center gap-2 p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                  <input type="checkbox" id="tempCheck" checked={isTemporary} onChange={(e) => setIsTemporary(e.target.checked)} className="w-4 h-4 cursor-pointer" />
+                  <label htmlFor="tempCheck" className="text-sm text-purple-300 cursor-pointer font-medium">Tarea fugaz (sin fecha)</label>
+                </div>
+                
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="flex-1">
                     <label className="text-[10px] text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Detalles (Opcional)</label>
@@ -518,7 +599,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {!editingTask && (
+                {!editingTask && !isTemporary && (
                   <div>
                     <label className="text-[10px] text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Se repite los días (Opcional)</label>
                     <div className="flex gap-1 justify-between">
@@ -533,16 +614,18 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <label className="text-[10px] text-slate-500 uppercase tracking-widest ml-1 mb-1 block">{selectedDays.length > 0 && !editingTask ? 'Fecha de inicio' : 'Fecha límite'}</label>
-                    <input type="date" value={dateStr} onChange={(e) => setDateStr(e.target.value)} className="w-full bg-[#0b0c10] border border-slate-700 rounded-xl p-3 text-slate-300 text-sm outline-none focus:border-cyan-500 transition-colors" style={{ colorScheme: 'dark' }} required={selectedDays.length > 0 && !editingTask} />
+                {!isTemporary && (
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="text-[10px] text-slate-500 uppercase tracking-widest ml-1 mb-1 block">{selectedDays.length > 0 && !editingTask ? 'Fecha de inicio' : 'Fecha límite'}</label>
+                      <input type="date" value={dateStr} onChange={(e) => setDateStr(e.target.value)} className="w-full bg-[#0b0c10] border border-slate-700 rounded-xl p-3 text-slate-300 text-sm outline-none focus:border-cyan-500 transition-colors" style={{ colorScheme: 'dark' }} required={selectedDays.length > 0 && !editingTask} />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Hora (Opcional)</label>
+                      <input type="time" value={timeStr} onChange={(e) => setTimeStr(e.target.value)} className="w-full bg-[#0b0c10] border border-slate-700 rounded-xl p-3 text-slate-300 text-sm outline-none focus:border-cyan-500 transition-colors" style={{ colorScheme: 'dark' }} />
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <label className="text-[10px] text-slate-500 uppercase tracking-widest ml-1 mb-1 block">Hora (Opcional)</label>
-                    <input type="time" value={timeStr} onChange={(e) => setTimeStr(e.target.value)} className="w-full bg-[#0b0c10] border border-slate-700 rounded-xl p-3 text-slate-300 text-sm outline-none focus:border-cyan-500 transition-colors" style={{ colorScheme: 'dark' }} />
-                  </div>
-                </div>
+                )}
                 
                 <div className="flex gap-4 mt-4">
                   <button type="button" onClick={resetForm} className="flex-1 text-slate-500 font-bold uppercase text-xs tracking-widest hover:text-white transition-colors">Cancelar</button>
